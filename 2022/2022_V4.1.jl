@@ -157,7 +157,8 @@ WE = 1:2
     WeC_1[Intern, Week, WE], Bin
     WeC_2[Intern, Week, WE], Bin
     WeD[Intern, Week, WE], Bin
-    PubC[Intern, Week, Day], Bin
+    PubC_1[Intern, Week, Day], Bin
+    PubC_2[Intern, Week, Day], Bin
     PubD[Intern, Week, Day], Bin
 end
 )
@@ -190,6 +191,9 @@ ADOs_total = @constraint(roster, [i in Intern],
                 sum(ADO[i,k,d] for k in 5:52, d in Day) == 12)
 ADOs_none = @constraint(roster, sum(ADO[i,k,d] for i in Intern, k in 1:4, d in Day) == 0)
 
+ADO_space = @constraint(roster, [i in Intern, k in 5:51],
+            sum( (ADO[i,k,d] + ADO[i,k+1,d]) for d in Day) <= 1) #to finish,
+
 TIL_ADOs = @constraint(roster, [i in Intern, k in Week, d in WE],
             TIL[i,k,d] + ADO[i,k,d] <= 1)
 
@@ -202,6 +206,8 @@ SpacedOutADOS = @constraint(roster, [i in Intern, beta in 0:11],
                 sum(ADO[i,5 + alpha + 4*beta, d] for d in Day, alpha in 0:3) == 1)
 
 Late_Shift = @constraint(roster, [k in 5:52], sum(LATE[i, k] for i in Intern) == 1)
+
+Even_Lates = @constraint(roster, [i in Intern], sum(LATE[i,k] for k in Week) ==4)
 
 No_Early_Late = @constraint(roster, sum(LATE[i,k] for i in Intern, k in 1:4) == 0)
 
@@ -223,16 +229,21 @@ LATE_at_Clay_2 = @constraint(roster, [i in Intern, k in Week, j in NLR],
 Pub_Weeks = [4,11,15,16,17,24,39,44,52,52]
 Pub_Days =  [3, 1, 5, 1, 1, 1, 5, 2, 1, 2]
 
-Pub_Shifts_Clay = @constraint(roster, [(k,d) in zip(Pub_Weeks,Pub_Days)],
-                    sum(PubC[i,k,d] for i in Intern) == 2)
+Pub_Shifts_Clay_1 = @constraint(roster, [(k,d) in zip(Pub_Weeks,Pub_Days)],
+                    sum(PubC_1[i,k,d] for i in Intern) == 1)
+Pub_Shifts_Clay_2 = @constraint(roster, [(k,d) in zip(Pub_Weeks,Pub_Days)],
+                    sum(PubC_2[i,k,d] for i in Intern) == 1)
 Pub_Shifts_Dan = @constraint(roster, [(k,d) in zip(Pub_Weeks,Pub_Days)],
                     sum(PubD[i,k,d] for i in Intern) == 1)
+
+PersonLimit = @constraint(roster, [i in Intern, (k,d) in zip(Pub_Weeks,Pub_Days)],
+                PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] <= 1)
 
 NoPubADOs = @constraint(roster,
             sum(ADO[i,k,d] for i in Intern, (k,d) in zip(Pub_Weeks,Pub_Days)) == 0)
 
 MaxPubWork = @constraint(roster, [i in Intern],
-                sum( (PubC[i,k,d] + PubD[i,k,d]) for (k,d) in zip(Pub_Weeks,Pub_Days) ) <= 3)
+                sum( (PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d]) for (k,d) in zip(Pub_Weeks,Pub_Days) ) <= 3)
 
 Sem_Weeks = [7,7,22,22,29,29,39,39]
 Sem_Days =  [1,2, 1, 2, 1, 2, 1, 2]
@@ -241,12 +252,18 @@ Seminars = @constraint(roster,
             sum(SEM[i,k,d] for i in Intern, (k,d) in zip(Sem_Weeks,Sem_Days)) == 96)
 
 C = @expression(roster,
-    sum( (PubC[i,k,d] + PubD[i,k,d] + SEM[i,k,s] + ADO[i,k,d] + LATE[i,k] + TIL[i,k,s])
+    sum( (PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] + SEM[i,k,s] + ADO[i,k,d] + LATE[i,k] + TIL[i,k,s])
     for i in Intern, k in Week, d in Day, s in WE ))
 
-obj = @objective(roster, Min, z + C)
+LateDisp = @expression(roster, sum(LATE[i,k]*x[i,k,14] for i in Intern, k in 5:52))
+# technically this makes the model an NLP, but we'll try and get away with it.
+# at least its only in the obj function
+
+obj = @objective(roster, Min, z + C - LateDisp)
 
 optimize!(roster)
+
+
 
 #_________________________________________________________________________
 
@@ -293,49 +310,48 @@ XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
 end
 
 #_________________________________________________________________________
+ados_out = string.(convert.(Int64,
+    round.(sum((d*Matrix(JuMP.value.(ADO[:,:,d]))) for d in 1:5))))
 
-ados = []
-for i in 1:12
-    push!(ados, convert.(Int64, round.(i*Matrix(JuMP.value.(ADO[i,:,:])))))
+weekdays = [ "Mon", "Tues", "Wed", "Thur", "Fri" ]
+for d in 1:5
+    replace!(ados_out, Nums[d] => weekdays[d])
 end
-ados
-
-for i in 1:12
-    ados[i]
-
-
-til =[]
-for i in 1:12
-    push!(til, convert.(Int64, round.(i*Matrix(JuMP.value.(TIL[i,:,:])))))
+XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
+    XLSX.addsheet!(xf, "ADOs")
+    sheet = xf[3]
+    sheet["B1:BA1"] = list
+    sheet["B4:BA15"] = ados_out
 end
-til
+#_________________________________________________________________________
+til_out = string.(convert.(Int64,
+    round.(sum((d*Matrix(JuMP.value.(TIL[:,:,d]))) for d in 1:2))))
+for d in 1:2
+    replace!(til_out, Nums[d] => weekdays[d])
+end
+XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
+    XLSX.addsheet!(xf, "TIL")
+    sheet = xf[4]
+    sheet["B1:BA1"] = list
+    sheet["B4:BA15"] = til_out
+end
+#_________________________________________________________________________
+late = (out).*Matrix(JuMP.value.(LATE[:,:]))
+late = string.(convert.(Int64, round.(late)))
+for j in 1:21
+    replace!(late, Nums[j] => Names[j])
+end
+XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
+    XLSX.addsheet!(xf, "Late_Shift")
+    sheet = xf[5]
+    sheet["B1:BA1"] = list
+    sheet["B4:BA15"] = late
+end
+#_________________________________________________________________________
 
-late = convert.(Int64, round.(sum((i*Array(JuMP.value.(LATE[i,:]))) for i in 1:12)))
 
-
-
-CLAY = convert.(Int64, round.(clay))
-dan= sum((i*Matrix(JuMP.value.(WeD[i,:,:]))) for i in 1:12)
-DAN = convert.(Int64, round.(dan))
-
-
-
-println(JuMP.value.(WeC[:,:,:]))
-println(JuMP.value.(WeD[:,:,:]))
-
-
-
-
-# using SparseArrays, DataFrames, CSV
-#
-# df2 = DataFrame(out)
-#
-# CSV.write("2022/2022_V1_raw.csv", df2)
-#
-# print(g)
-#
-# df = CSV.read("2022/2022_V1_raw.csv")
-#
-# convert(Matrix, df)
-#
-# df4
+for (i,j) in zip(Pub_Weeks, Pub_Days)
+    println(JuMP.value.(PubC_1[:,i,j]))
+    println(JuMP.value.(PubC_2[:,i,j]))
+    println(JuMP.value.(PubD[:,i,j]))
+end
