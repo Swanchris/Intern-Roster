@@ -147,14 +147,16 @@ z = @expression(roster, sum(x[i,k,j] for i in Intern, j in 12:13, k in restricte
 
 Day = 1:5
 WE = 1:2
+Group = 1:6
+Period = 1:3
 
 @variables(roster, begin
     LATE[Intern, Week], Bin
     ADO[Intern, Week, Day], Bin
     TIL[Intern, Week, WE], Bin
     SEM[Intern, Week, WE], Bin
-    WeC_1[Intern, Week, WE], Bin
-    WeC_2[Intern, Week, WE], Bin
+    WeC_1[Intern, Week, WE, Group], Bin
+    WeC_2[Intern, Week, WE, Group], Bin
     WeD[Intern, Week, WE], Bin
     PubC_1[Intern, Week, Day], Bin
     PubC_2[Intern, Week, Day], Bin
@@ -163,28 +165,47 @@ end
 )
 
 Clay_weekend_limiter_1 = @constraint(roster, [k in Week, s in WE],
-                        sum(WeC_1[i,k,s] for i in Intern) == 1)
+                        sum(WeC_1[i,k,s,h] for i in Intern, h in Group) == 1)
 Clay_weekend_limiter_2 = @constraint(roster, [k in Week, s in WE],
-                        sum(WeC_2[i,k,s] for i in Intern) == 1)
+                        sum(WeC_2[i,k,s, h] for i in Intern, h in Group) == 1)
 Dan_weekend_limiter = @constraint(roster, [k in Week, s in WE],
                         sum(WeD[i,k,s] for i in Intern) == 1)
 
+
+
+# _-_-_-_-_-_-_-_-_-_-_-_-
+
 Single_Weekend_work_limiter = @constraint(roster, [i in Intern, k in Week],
-                                sum(WeC_1[i,k,s] + WeC_2[i,k,s] + WeD[i,k,s] for s in WE) <= 1)
+                                sum( (WeC_1[i,k,s,h] + WeC_2[i,k,s,h] + WeD[i,k,s]) for s in WE, h in Group) <= 1)
+
+
 
 Total_Weekend_shifts_limit = @constraint(roster, [i in Intern],
-                                sum(WeC_1[i,k,s] + WeC_2[i,k,s] + WeD[i,k,s] for k in Week,
-                                s in WE) <= 26)
-
-@variable(roster, p[Intern, Week, WE], Bin)
+                                sum(WeC_1[i,k,s,h] + WeC_2[i,k,s,h] + WeD[i,k,s] for k in Week,
+                                s in WE, h in Group) <= 26)
 
 
 
+@variable(roster, w[Intern, Period, Group], Bin)
 
+pairing_1 = @constraint(roster, [g in Period, h in Group],
+            sum(w[i,g,h] for i in Intern) == 2)
+pairing_2 = @constraint(roster, [i in Intern, g in Period],
+            sum(w[i,g,h] for h in Group) == 1)
+
+weekend_pairing_1 = @constraint(roster, [k in 2:18, s in WE, h in Group],
+        sum( (WeC_1[i,k,s,h] + WeC_2[i,k,s,h] - w[i,1,h]) for i in Intern ) == 0)
+weekend_pairing_2 = @constraint(roster, [k in 19:35, s in WE, h in Group],
+        sum( (WeC_1[i,k,s,h] + WeC_2[i,k,s,h] - w[i,2,h]) for i in Intern ) == 0)
+weekend_pairing_3 = @constraint(roster, [k in 36:52, s in WE, h in Group],
+        sum( (WeC_1[i,k,s,h] + WeC_2[i,k,s,h] - w[i,3,h]) for i in Intern ) == 0)
 
 
 TIL_constraint = @constraint(roster, [i in Intern, k in 1:51, s in WE],
-        WeC_1[i,k,s] + WeC_2[i,k,s] + WeD[i,k,s] - TIL[i,k+1,s] == 0)
+        sum(WeC_1[i,k,s,h] + WeC_2[i,k,s,h] for h in Group) + WeD[i,k,s] - TIL[i,k+1,s] == 0)
+
+# _-_-_-_-_-_-_-_-_-_-_-_-
+
 
 @variable(roster, t[Intern, Week], Bin)
 

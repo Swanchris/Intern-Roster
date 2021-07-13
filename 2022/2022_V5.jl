@@ -176,11 +176,26 @@ Total_Weekend_shifts_limit = @constraint(roster, [i in Intern],
                                 sum(WeC_1[i,k,s] + WeC_2[i,k,s] + WeD[i,k,s] for k in Week,
                                 s in WE) <= 26)
 
-@variable(roster, p[Intern, Week, WE], Bin)
+### Weekend_bastardisation
+a_1 = [2*i-1 for i in 1:6]
+a_2 = [2*i for i in 1:6]
+b_1 = 1:6
+b_2 = 7:12
+c_1 = 1:6
+c_2 = [12, 11, 10, 9, 8, 7]
 
-
-
-
+pair_1 = @constraint(roster, [k in 1:18, (a,b) in zip(a_1,a_2), s in WE],
+            WeC_1[a,k,s] - WeC_2[b,k,s] == 0)
+pair_1a = @constraint(roster, [k in 1:18, (a,b) in zip(a_1,a_2), s in WE],
+            WeC_1[b,k,s] - WeC_2[a,k,s] == 0)
+pair_2 = @constraint(roster, [k in 19:35, (a,b) in zip(b_1,b_2), s in WE],
+            WeC_1[a,k,s] - WeC_2[b,k,s] == 0)
+pair_2a = @constraint(roster, [k in 19:35, (a,b) in zip(b_1,b_2), s in WE],
+            WeC_1[b,k,s] - WeC_2[a,k,s] == 0)
+pair_3 = @constraint(roster, [k in 36:52, (a,b) in zip(c_1,c_2), s in WE],
+            WeC_1[a,k,s] - WeC_2[b,k,s] == 0)
+pair_3a = @constraint(roster, [k in 36:52, (a,b) in zip(c_1,c_2), s in WE],
+            WeC_1[b,k,s] - WeC_2[a,k,s] == 0)
 
 
 TIL_constraint = @constraint(roster, [i in Intern, k in 1:51, s in WE],
@@ -197,8 +212,11 @@ ADOs_total = @constraint(roster, [i in Intern],
                 sum(ADO[i,k,d] for k in 5:52, d in Day) == 12)
 ADOs_none = @constraint(roster, sum(ADO[i,k,d] for i in Intern, k in 1:4, d in Day) == 0)
 
+ADO_Daily_Limit = @constraint(roster, [k in 5:52, d in Day],
+                sum(ADO[i,k,d] for i in Intern) <= 2)
+
 ADO_space = @constraint(roster, [i in Intern, k in 5:51],
-            sum( (ADO[i,k,d] + ADO[i,k+1,d]) for d in Day) <= 1) #to finish,
+            sum( (ADO[i,k,d] + ADO[i,k+1,d]) for d in Day) <= 1)
 
 TIL_ADOs = @constraint(roster, [i in Intern, k in Week, d in WE],
             TIL[i,k,d] + ADO[i,k,d] <= 1)
@@ -242,6 +260,19 @@ Pub_Shifts_Clay_2 = @constraint(roster, [(k,d) in zip(Pub_Weeks,Pub_Days)],
 Pub_Shifts_Dan = @constraint(roster, [(k,d) in zip(Pub_Weeks,Pub_Days)],
                     sum(PubD[i,k,d] for i in Intern) == 1)
 
+Pubpair_1 = @constraint(roster, [k in 1:18, (a,b) in zip(a_1,a_2), s in WE],
+            PubC_1[a,k,s] - PubC_2[b,k,s] == 0)
+Pubpair_1a = @constraint(roster, [k in 1:18, (a,b) in zip(a_1,a_2), s in WE],
+            PubC_1[b,k,s] - PubC_2[a,k,s] == 0)
+Pubpair_2 = @constraint(roster, [k in 19:35, (a,b) in zip(b_1,b_2), s in WE],
+            PubC_1[a,k,s] - PubC_2[b,k,s] == 0)
+Pubpair_2a = @constraint(roster, [k in 19:35, (a,b) in zip(b_1,b_2), s in WE],
+            PubC_1[b,k,s] - PubC_2[a,k,s] == 0)
+Pubpair_3 = @constraint(roster, [k in 36:52, (a,b) in zip(c_1,c_2), s in WE],
+            PubC_1[a,k,s] - PubC_2[b,k,s] == 0)
+Pubpair_3a = @constraint(roster, [k in 36:52, (a,b) in zip(c_1,c_2), s in WE],
+            PubC_1[b,k,s] - PubC_2[a,k,s] == 0)
+
 PersonLimit = @constraint(roster, [i in Intern, (k,d) in zip(Pub_Weeks,Pub_Days)],
                 PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] <= 1)
 
@@ -261,7 +292,11 @@ C = @expression(roster,
     sum( (PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] + SEM[i,k,s] + ADO[i,k,d] + LATE[i,k] + TIL[i,k,s])
     for i in Intern, k in Week, d in Day, s in WE ))
 
-LateDisp = @expression(roster, sum(100*(LATE[i,k] - x[i,k,j]) for i in Intern, k in 5:52, j in [1,2,4,11,21]))
+# obj = @objective(roster, Min, z + C)
+#
+# optimize!(roster)
+
+LateDisp = @expression(roster, sum((LATE[i,k]*x[i,k,14]) for i in Intern, k in 5:52))
 # technically this makes the model an NLP, but we'll try and get away with it.
 # at least its only in the obj function
 
@@ -307,12 +342,38 @@ for i in 0:51
     Weekend_roster[6*i+6] = dan1[i+53]
 end
 
-Weekend_roster = convert.(Int64, round.(Weekend_roster))
+JuMP.value.(WeC_1[:,1,1])
+JuMP.value.(WeC_2[:,1,1])
+
+Pub_container = []
+ABC = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+for (i,j) in zip(Pub_Weeks, Pub_Days)
+    push!(Pub_container, sum(ABC .* Vector(JuMP.value.(PubC_1[:,i,j]))))
+    push!(Pub_container, sum(ABC .* Vector(JuMP.value.(PubC_2[:,i,j]))))
+    push!(Pub_container, sum(ABC .* Vector(JuMP.value.(PubD[:,i,j]))))
+end
+
+Pub_container = reshape(Pub_container, 3, 10)
+
+ Weekend = [reshape(Weekend_roster[1:18],3,6) reshape(Pub_container[1:3],3,1) (
+    reshape(Weekend_roster[19:60],3,14) ) reshape(Pub_container[4:6],3,1) (
+    reshape(Weekend_roster[61:84],3,8) ) reshape(Pub_container[7:9],3,1) (
+    reshape(Weekend_roster[85:90],3,2) ) reshape(Pub_container[10:12],3,1) (
+    reshape(Weekend_roster[91:96],3,2) ) reshape(Pub_container[13:15],3,1) (
+    reshape(Weekend_roster[97:138],3,14) ) reshape(Pub_container[16:18],3,1) (
+    reshape(Weekend_roster[139:228],3,30) ) reshape(Pub_container[19:21],3,1) (
+    reshape(Weekend_roster[229:258],3,10) ) reshape(Pub_container[22:24],3,1) (
+    reshape(Weekend_roster[259:306],3,16) ) reshape(Pub_container[25:30],3,2) (
+    reshape(Weekend_roster[307:312],3,2) )]
+
+Weekend_roster = convert.(Int64, round.(Weekend))
+
 
 XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
     XLSX.addsheet!(xf, "Weekends")
     sheet = xf[2]
-    sheet["B4:DA6"] = Weekend_roster
+    sheet["B4:DK6"] = Weekend_roster
 end
 
 #_________________________________________________________________________
@@ -355,9 +416,8 @@ XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
 end
 #_________________________________________________________________________
 
+nnnn = [i for i in Rotation]
 
-for (i,j) in zip(Pub_Weeks, Pub_Days)
-    println(JuMP.value.(PubC_1[:,i,j]))
-    println(JuMP.value.(PubC_2[:,i,j]))
-    println(JuMP.value.(PubD[:,i,j]))
-end
+convert.(Int64, round.(nnnn' *Array(JuMP.value.(x[1,:,:]))'))
+
+Intern_1_out = sum((j*Matrix(JuMP.value.(x[:,:,j]))) for j in 1:21)

@@ -176,7 +176,17 @@ Total_Weekend_shifts_limit = @constraint(roster, [i in Intern],
                                 sum(WeC_1[i,k,s] + WeC_2[i,k,s] + WeD[i,k,s] for k in Week,
                                 s in WE) <= 26)
 
-@variable(roster, p[Intern, Week, WE], Bin)
+Group = 1:6
+Period = 1:3
+
+@variable(roster, p[Intern, Week, Group], Bin)
+@variable(roster, w[Intern, Period, Group], Bin)
+@variable(roster, om[Intern, Group], Bin)
+
+pair_1 = @constraint(roster, [g in Period, h in Group],
+        sum(w[i,g,h] for i in Intern) == 2)
+pair_2 = @constraint(roster, [i in Intern, g in Period],
+        sum(w[i,g,h] for h in Group) == 1)
 
 
 
@@ -197,8 +207,11 @@ ADOs_total = @constraint(roster, [i in Intern],
                 sum(ADO[i,k,d] for k in 5:52, d in Day) == 12)
 ADOs_none = @constraint(roster, sum(ADO[i,k,d] for i in Intern, k in 1:4, d in Day) == 0)
 
+ADO_Daily_Limit = @constraint(roster, [k in 5:52, d in Day],
+                sum(ADO[i,k,d] for i in Intern) <= 2)
+
 ADO_space = @constraint(roster, [i in Intern, k in 5:51],
-            sum( (ADO[i,k,d] + ADO[i,k+1,d]) for d in Day) <= 1) #to finish,
+            sum( (ADO[i,k,d] + ADO[i,k+1,d]) for d in Day) <= 1)
 
 TIL_ADOs = @constraint(roster, [i in Intern, k in Week, d in WE],
             TIL[i,k,d] + ADO[i,k,d] <= 1)
@@ -261,7 +274,11 @@ C = @expression(roster,
     sum( (PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] + SEM[i,k,s] + ADO[i,k,d] + LATE[i,k] + TIL[i,k,s])
     for i in Intern, k in Week, d in Day, s in WE ))
 
-LateDisp = @expression(roster, sum(100*(LATE[i,k] - x[i,k,j]) for i in Intern, k in 5:52, j in [1,2,4,11,21]))
+# obj = @objective(roster, Min, z + C)
+#
+# optimize!(roster)
+
+LateDisp = @expression(roster, sum((LATE[i,k]*x[i,k,14]) for i in Intern, k in 5:52))
 # technically this makes the model an NLP, but we'll try and get away with it.
 # at least its only in the obj function
 
@@ -356,8 +373,8 @@ end
 #_________________________________________________________________________
 
 
-for (i,j) in zip(Pub_Weeks, Pub_Days)
-    println(JuMP.value.(PubC_1[:,i,j]))
-    println(JuMP.value.(PubC_2[:,i,j]))
-    println(JuMP.value.(PubD[:,i,j]))
-end
+# for (i,j) in zip(Pub_Weeks, Pub_Days)
+#     println(JuMP.value.(PubC_1[:,i,j]))
+#     println(JuMP.value.(PubC_2[:,i,j]))
+#     println(JuMP.value.(PubD[:,i,j]))
+# end
