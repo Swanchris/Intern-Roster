@@ -218,11 +218,11 @@ ADO_Daily_Limit = @constraint(roster, [k in 5:52, d in Day],
 ADO_space = @constraint(roster, [i in Intern, k in 5:51],
             sum( (ADO[i,k,d] + ADO[i,k+1,d]) for d in Day) <= 1)
 
-TIL_ADOs = @constraint(roster, [i in Intern, k in Week, d in WE],
-            TIL[i,k,d] + ADO[i,k,d] <= 1)
+TIL_ADOs_AL = @constraint(roster, [i in Intern, k in Week, d in WE],
+            TIL[i,k,d] + ADO[i,k,d] + x[i,k,20] <= 1)
 
 SEM_ADOs = @constraint(roster, [i in Intern, k in Week, d in WE],
-            SEM[i,k,d] + ADO[i,k,d] <= 1)
+            SEM[i,k,d] + ADO[i,k,d]+ x[i,k,20] <= 1)
 
 NoThursADO = @constraint(roster, sum(ADO[i,k,4] for i in Intern, k in Week) == 0)
 
@@ -260,17 +260,17 @@ Pub_Shifts_Clay_2 = @constraint(roster, [(k,d) in zip(Pub_Weeks,Pub_Days)],
 Pub_Shifts_Dan = @constraint(roster, [(k,d) in zip(Pub_Weeks,Pub_Days)],
                     sum(PubD[i,k,d] for i in Intern) == 1)
 
-Pubpair_1 = @constraint(roster, [k in 1:18, (a,b) in zip(a_1,a_2), s in WE],
+Pubpair_1 = @constraint(roster, [k in 1:18, (a,b) in zip(a_1,a_2), s in Day],
             PubC_1[a,k,s] - PubC_2[b,k,s] == 0)
-Pubpair_1a = @constraint(roster, [k in 1:18, (a,b) in zip(a_1,a_2), s in WE],
+Pubpair_1a = @constraint(roster, [k in 1:18, (a,b) in zip(a_1,a_2), s in Day],
             PubC_1[b,k,s] - PubC_2[a,k,s] == 0)
-Pubpair_2 = @constraint(roster, [k in 19:35, (a,b) in zip(b_1,b_2), s in WE],
+Pubpair_2 = @constraint(roster, [k in 19:35, (a,b) in zip(b_1,b_2), s in Day],
             PubC_1[a,k,s] - PubC_2[b,k,s] == 0)
-Pubpair_2a = @constraint(roster, [k in 19:35, (a,b) in zip(b_1,b_2), s in WE],
+Pubpair_2a = @constraint(roster, [k in 19:35, (a,b) in zip(b_1,b_2), s in Day],
             PubC_1[b,k,s] - PubC_2[a,k,s] == 0)
-Pubpair_3 = @constraint(roster, [k in 36:52, (a,b) in zip(c_1,c_2), s in WE],
+Pubpair_3 = @constraint(roster, [k in 36:52, (a,b) in zip(c_1,c_2), s in Day],
             PubC_1[a,k,s] - PubC_2[b,k,s] == 0)
-Pubpair_3a = @constraint(roster, [k in 36:52, (a,b) in zip(c_1,c_2), s in WE],
+Pubpair_3a = @constraint(roster, [k in 36:52, (a,b) in zip(c_1,c_2), s in Day],
             PubC_1[b,k,s] - PubC_2[a,k,s] == 0)
 
 PersonLimit = @constraint(roster, [i in Intern, (k,d) in zip(Pub_Weeks,Pub_Days)],
@@ -305,7 +305,9 @@ obj = @objective(roster, Min, z + C - LateDisp)
 optimize!(roster)
 
 
+#_________________________________________________________________________
 
+wd = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 #_________________________________________________________________________
 
 out = sum((j*Matrix(JuMP.value.(x[:,:,j]))) for j in 1:21)
@@ -416,8 +418,117 @@ XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
 end
 #_________________________________________________________________________
 
-nnnn = [i for i in Rotation]
 
-convert.(Int64, round.(nnnn' *Array(JuMP.value.(x[1,:,:]))'))
+# finding a replicable way to create individual rosters
 
-Intern_1_out = sum((j*Matrix(JuMP.value.(x[:,:,j]))) for j in 1:21)
+function jump_to_int(intern)
+    convert.(Int64, round.(Matrix(JuMP.value.(x[intern,:,:]))'))
+end
+
+function convert_rots_to_vector(x)
+    rot_nums = [i for i in Rotation]'
+    rot_nums * x
+end
+
+function make_5_day_week(x)
+    repeat(x, 5,1)
+end
+
+function replace_rotations(x)
+    x = string.(x)
+    Names = ["IP", "MCH", "AP", "MIC", "CPDan-G", "CPDan-V", "CPDan-MH",
+        "CPCas-G", "CPMoor", "CPKing", "CPClay", "HOMR/AAC", "QUM", "Disp-Clay", "Disp-Dan",
+        "Disp-King", "Disp-Moor", "Disp-Cas", "CPCas-ED", "AL", "CPClay-G"]
+    Nums = string.(collect(1:21))
+    for j in 1:21
+        replace!(x, Nums[j] => Names[j])
+    end
+    return x
+end
+
+function weekend_out(intern)
+    function jump_custom(X)
+        convert.(Int64, round.(Matrix(JuMP.value.(X))'))
+    end
+    w1 = jump_custom(WeC_1[intern,:,:])
+    w2 = 2*jump_custom(WeC_2[intern,:,:])
+    w3 = 3*jump_custom(WeD[intern,:,:])
+    w1+w2+w3
+end
+
+function f(x)
+    x > 0
+end
+
+function publics(rost, intern)
+    pub1 = findall(f,Matrix(JuMP.value.(PubC_1[intern,:,:]))')
+    pub2 = findall(f,Matrix(JuMP.value.(PubC_2[intern,:,:]))')
+    pub3 = findall(f,Matrix(JuMP.value.(PubD[intern,:,:]))')
+    for i in pub1
+        rost[i] = 1
+    end
+    for i in pub2
+        rost[i] = 2
+    end
+    for i in pub3
+        rost[i] = 3
+    end
+    rost
+end
+
+function find_ados(rost, intern)
+    adooo = findall(f,Matrix(JuMP.value.(ADO[intern,:,:]))')
+    for i in adooo
+        rost[i] = 4
+    end
+    rost
+end
+
+function find_til(rost, intern)
+    til = findall(f,Matrix(JuMP.value.(TIL[intern,:,:]))')
+    for i in til
+        rost[i] = 5
+    end
+    rost
+end
+
+function lateShifts(rost, intern)
+    l = convert.(Int64, round.(6*Vector(JuMP.value.(LATE[intern,:]))'))
+    [l ; rost]
+end
+
+function replace_rest(x)
+    x = string.(x)
+    rot_num = ["1" "2" "3" "4" "5" "6"]
+    rot_name = ["W/E_Clay_1" "W/E_Clay_2" "W/E_Dan" "ADO" "TIL" "LATE SHIFT"]
+    for i in 1:length(rot_num)
+        replace!(x, rot_num[i] => rot_name[i])
+    end
+    x
+end
+
+
+function indiv_roster(intern, filename, sheetname)
+    rrr = jump_to_int(intern)
+    v1 = convert_rots_to_vector(rrr)
+    v1 = make_5_day_week(v1)
+    str_ouput_weekedays = replace_rotations(v1)
+    W = weekend_out(intern)
+    combined_roster = [str_ouput_weekedays; W]
+    rost_with_pubs = publics(combined_roster, intern)
+    rost_with_ados = find_ados(rost_with_pubs, intern)
+    rost_with_til = find_til(rost_with_ados, intern)
+    final_rost = lateShifts(rost_with_til, intern)
+    final_rost_str = replace_rest(final_rost)
+
+    XLSX.openxlsx(filename, mode="rw") do xf
+        XLSX.addsheet!(xf, sheetname)
+        sheet = xf[intern + 5]
+        sheet["B1:BA1"] = list
+        sheet["B4:BA11"] = final_rost_str
+    end
+end
+
+for i in 1:12
+    indiv_roster(i, "output/2022_roster.xlsx", "Intern $(i) Roster")
+end
