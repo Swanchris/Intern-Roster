@@ -79,12 +79,12 @@ MIC = @constraint(roster, [ i in Intern, k in 29:51],
 @variable(roster, g[Intern, [5,8,21]], Bin)
 
 gen_med = @constraint(roster, [i in Intern],
-        sum(x[i,k,j] for k in Week, j in [5,8,21]) == 7)
+        sum(x[i,k,j] for k in 18:52, j in [5,8,21]) == 7)
 g_limiter = @constraint(roster, [j in [5,8,21]], sum(g[i,j] for i in Intern) == 4)
 g_vars = @constraint(roster, [i in Intern], sum(g[i,j] for j in [5,8,21]) ==1)
 gen_duration_dvar = @constraint(roster, [i in Intern, j in [5,8,21] ],
-                sum(y[i,k,j] for k in 1:46) == g[i,j])
-gen_durations = @constraint(roster, [i in Intern, k in 1:46, j in [5,8,21]],
+                sum(y[i,k,j] for k in 18:46) == g[i,j])
+gen_durations = @constraint(roster, [i in Intern, k in 18:46, j in [5,8,21]],
                 7*y[i,k,j] - sum(x[i, k + alpha, j] for alpha in 0:6 ) <= 0)
 
 
@@ -169,6 +169,12 @@ Clay_weekend_limiter_2 = @constraint(roster, [k in Week, s in WE],
 Dan_weekend_limiter = @constraint(roster, [k in Week, s in WE],
                         sum(WeD[i,k,s] for i in Intern) == 1)
 
+No_Three_Weekends_in_a_row = @constraint(roster, [i in Intern, k in 1:50],
+                        sum(WeC_1[i,k,s] + WeC_2[i,k,s] + WeD[i,k,s] +
+                        WeC_1[i,k+1,s] + WeC_2[i,k+1,s] + WeD[i,k+1,s] +
+                        WeC_1[i,k+2,s] + WeC_2[i,k+2,s] + WeD[i,k+2,s] for s in WE) <= 2)
+
+
 Single_Weekend_work_limiter = @constraint(roster, [i in Intern, k in Week],
                                 sum(WeC_1[i,k,s] + WeC_2[i,k,s] + WeD[i,k,s] for s in WE) <= 1)
 
@@ -220,6 +226,9 @@ ADO_space = @constraint(roster, [i in Intern, k in 5:51],
 
 TIL_ADOs_AL = @constraint(roster, [i in Intern, k in Week, d in WE],
             TIL[i,k,d] + ADO[i,k,d] + x[i,k,20] <= 1)
+
+ADOs_AL = @constraint(roster, [i in Intern, k in Week, d in Day],
+            ADO[i,k,d] + x[i,k,20] <= 1)
 
 SEM_ADOs = @constraint(roster, [i in Intern, k in Week, d in WE],
             SEM[i,k,d] + ADO[i,k,d]+ x[i,k,20] <= 1)
