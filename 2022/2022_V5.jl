@@ -27,6 +27,9 @@ Third_week_dvar = @constraint(roster, [i in Intern],
 Third_week_block = @constraint(roster, [i in Intern, k in 47:51],
                     2*y[i, k, 20] - sum(x[i, k + alpha, 20] for alpha in 0:1) <= 0)
 
+#cover all other scenarios:
+# leave_dvar = @constraint(roster, [i in Intern, k in Week],
+#                     y[i,k,20] - x[i,k,20] == 0)
 
 # Physical Constraint _________________________________________________________________________
 
@@ -288,6 +291,20 @@ PersonLimit = @constraint(roster, [i in Intern, (k,d) in zip(Pub_Weeks,Pub_Days)
 NoPubADOs = @constraint(roster,
             sum(ADO[i,k,d] for i in Intern, (k,d) in zip(Pub_Weeks,Pub_Days)) == 0)
 
+@variable(roster, p[Intern, Week], Bin)
+
+
+NoPubDuringAL_1 = @constraint(roster,[i in Intern, (k,d) in zip(Pub_Weeks,Pub_Days)],
+            x[i,k,20] - p[i,k] <= 0)
+
+NoPubDuringAL_2 = @constraint(roster,[i in Intern, (k,d) in zip(Pub_Weeks,Pub_Days)],
+            PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] + p[i,k] <= 1)
+
+# No_WE_after_leave = @constraint(roster, [i in Intern, k in 1:51, d in WE],
+#             WeC_1[i,k,d] + WeC_2[i,k,d] + WeD[i,k,d] + y[i,k,20] <= 1)
+
+
+
 MaxPubWork = @constraint(roster, [i in Intern],
                 sum( (PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d]) for (k,d) in zip(Pub_Weeks,Pub_Days) ) <= 3)
 
@@ -306,7 +323,7 @@ C = @expression(roster,
 # optimize!(roster)
 
 LateDisp = @expression(roster, sum((LATE[i,k]*x[i,k,14]) for i in Intern, k in 5:52))
-# technically this makes the model an NLP, but we'll try and get away with it.
+# technically this makes the model an NLP, but we'll try and get away with a quadratic program.
 # at least its only in the obj function
 
 obj = @objective(roster, Min, z + C - LateDisp)
