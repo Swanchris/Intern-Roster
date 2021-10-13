@@ -37,7 +37,7 @@ physical = @constraint(roster, [i in Intern, k in Week], sum(x[i,k,j] for j in R
 
 # Rotations  _________________________________________________________________________
 
-# rotations = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
+rotations = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
 capacity  = [2,1,1,1,1,1,1,1,1, 1, 6, 1, 2, 2, 1, 1, 1, 1, 1,12, 1] # after week 5
 
 early_cap = [2,0,0,0,0,0,0,0,0, 0, 0, 0, 0, 4, 2, 1, 1, 2, 0, 0, 0] # weeks 1 to 4
@@ -45,7 +45,7 @@ early_cap = [2,0,0,0,0,0,0,0,0, 0, 0, 0, 0, 4, 2, 1, 1, 2, 0, 0, 0] # weeks 1 to
 Rotation_capacities_early = @constraint(roster, [(j,d) in zip(Rotation, early_cap), k in 1:4],
                         sum(x[i,k,j] for i in Intern) <= d)
 
-Rotation_capacities_early = @constraint(roster, [(j,d) in zip(Rotation, capacity), k in 5:52],
+Rotation_capacities = @constraint(roster, [(j,d) in zip(Rotation, capacity), k in 5:52],
                         sum(x[i,k,j] for i in Intern) <= d)
 
 # Rotation completion _________________________________________________________________________
@@ -92,9 +92,9 @@ gen_durations = @constraint(roster, [i in Intern, k in 18:46, j in [5,8,21]],
 
 
 # j =19
-ed = MentalHealth = @constraint(roster, [i in Intern], sum(x[i,k,19] for k in Week) ==2)
-ed_dvar = @constraint(roster, [i in Intern], sum(y[i,k,19] for k in 5:50) == 1)
-ed_dur = @constraint(roster, [i in Intern, k in 5:50],
+ed = @constraint(roster, [i in Intern], sum(x[i,k,19] for k in Week) ==2)
+ed_dvar = @constraint(roster, [i in Intern], sum(y[i,k,19] for k in 5:51) == 1)
+ed_dur = @constraint(roster, [i in Intern, k in 5:51],
                 2 - sum(x[i,k + alpha, 19] for alpha in 0:1) <= 2*(1-y[i,k,19]))
 
 # j =6
@@ -143,18 +143,19 @@ Disp_early_rest = @constraint(roster, [i in Intern, j in 15:18],
 # objective
 restricted = [4,7,11,15,16,22,24,29,39,44,52]
 
+#no qum / homr in certain weeks
+qum_constraint1 = @constraint(roster, sum(x[i,k,j] for i in Intern, j in 12:13, k in restricted) == 0)
 
-z = @expression(roster, sum(x[i,k,j] for i in Intern, j in 12:13, k in restricted)
-                - sum(x[i,k,j] for i in Intern, j in 14:18, k in 1:6))
+z = @expression(roster, - sum(x[i,k,j] for i in Intern, j in 14:18, k in 1:6))
 # z = @expression(roster, sum(x[i,k,j] for i in Intern, j in Rotation, k in Week))
 
 Day = 1:5
 WE = 1:2
-ad = [3,5]
+
 
 @variables(roster, begin
     LATE[Intern, Week], Bin
-    ADO[Intern, Week, ad], Bin
+    ADO[Intern, Week, Day], Bin
     TIL[Intern, Week, WE], Bin
     SEM[Intern, Week, WE], Bin
     WeC_1[Intern, Week, WE], Bin
@@ -186,9 +187,15 @@ Total_Weekend_shifts_limit = @constraint(roster, [i in Intern],
                                 sum(WeC_1[i,k,s] + WeC_2[i,k,s] + WeD[i,k,s] for k in Week,
                                 s in WE) <= 26)
 
-Weekend_orien_1 = @constraint(roster, [i in Intern], sum(WeC_1[i,k,s] + PubC_1[i,k,d] for k in 1:6, s in WE, d in Day) >= 1)
-Weekend_orien_2 = @constraint(roster, [i in Intern], sum(WeC_2[i,k,s] + PubC_2[i,k,d] for k in 1:6, s in WE, d in Day) >= 1)
-Weekend_orien_3 = @constraint(roster, [i in Intern], sum(WeD[i,k,s] + PubD[i,k,d] for k in 1:6, s in WE, d in Day) >= 1)
+Weekend_orien_1 = @constraint(roster, [i in Intern],
+                    sum(WeC_1[i,k,s] for k in 1:5, s in WE)
+                    + sum(PubC_1[i,k,d] for k in 1:5,d in Day) + WeC_1[i,6,1] == 1)
+Weekend_orien_2 = @constraint(roster, [i in Intern],
+                    sum(WeC_2[i,k,s] for k in 1:5, s in WE)
+                    + sum(PubC_2[i,k,d] for k in 1:5,d in Day) + WeC_2[i,6,1] == 1)
+Weekend_orien_3 = @constraint(roster, [i in Intern],
+                    sum(WeD[i,k,s] for k in 1:5, s in WE)
+                    + sum(PubD[i,k,d] for k in 1:5,d in Day) + WeD[i,6,1] == 1)
 
 ### Weekend_bastardisation
 a_1 = [2*i-1 for i in 1:6]
@@ -198,10 +205,14 @@ b_2 = 7:12
 c_1 = 1:6
 c_2 = [12, 11, 10, 9, 8, 7]
 
-pair_1 = @constraint(roster, [k in 6:21, (a,b) in zip(a_1,a_2), s in WE],
+pair_1 = @constraint(roster, [k in 7:21, (a,b) in zip(a_1,a_2), s in WE],
             WeC_1[a,k,s] - WeC_2[b,k,s] == 0)
-pair_1a = @constraint(roster, [k in 6:21, (a,b) in zip(a_1,a_2), s in WE],
+Xpair_1 = @constraint(roster, [(a,b) in zip(a_1,a_2)],
+            WeC_1[a,6,2] - WeC_2[b,6,2] == 0)
+pair_1a = @constraint(roster, [k in 7:21, (a,b) in zip(a_1,a_2), s in WE],
             WeC_1[b,k,s] - WeC_2[a,k,s] == 0)
+Xpair_1a = @constraint(roster, [(a,b) in zip(a_1,a_2)],
+            WeC_1[b,6,2] - WeC_2[a,6,2] == 0)
 pair_2 = @constraint(roster, [k in 22:37, (a,b) in zip(b_1,b_2), s in WE],
             WeC_1[a,k,s] - WeC_2[b,k,s] == 0)
 pair_2a = @constraint(roster, [k in 22:37, (a,b) in zip(b_1,b_2), s in WE],
@@ -219,32 +230,50 @@ TIL_constraint = @constraint(roster, [i in Intern, k in 1:51, s in WE],
 
 No_TIL_1 = @constraint(roster, [i in Intern, k in Week, d in WE, j in [12,13,20]],
             TIL[i,k,d] - t[i,k] <= 0)
-No_TIL_2 = @constraint(roster, [i in Intern, k in Week, d in WE, j in [12,13,20]],
+No_TIL_2 = @constraint(roster, [i in Intern, k in Week, j in [12,13,20]],
              x[i,k,j] + t[i,k]  <= 1)
 
 ADOs_total = @constraint(roster, [i in Intern],
-                sum(ADO[i,k,d] for k in 5:52, d in ad) == 12)
-ADOs_none = @constraint(roster, sum(ADO[i,k,d] for i in Intern, k in 1:4, d in ad) == 0)
+                sum(ADO[i,k,d] for k in 5:52, d in Day) == 11)
+ADOs_none = @constraint(roster, sum(ADO[i,k,d] for i in Intern, k in 1:4, d in Day) == 0)
 
-ADO_Daily_Limit = @constraint(roster, [k in 5:52, d in ad],
-                sum(ADO[i,k,d] for i in Intern) <= 2)
+ADO_none_oct = @constraint(roster, sum(ADO[i,k,d] for i in Intern, k in 40:43, d in Day) == 0)
 
-ADO_space = @constraint(roster, [i in Intern, k in 5:51],
-            sum( (ADO[i,k,d] + ADO[i,k+1,d]) for d in ad) <= 1)
+@variable(roster, η[Intern, Week], Bin)
 
-# TIL_ADOs = @constraint(roster, [i in Intern, k in Week],
-#             sum(TIL[i,k,s] + ADO[i,k,δ] for s in WE, d in Day, δ in ad) <= 1)
+TIL_ADOs = @constraint(roster, [i in Intern, k in Week, s in WE, d in Day],
+            TIL[i,k,s] + ADO[i,k,d] <= 1 ) # + η[i,k]
 
-ADOs_AL = @constraint(roster, [i in Intern, k in Week],
-            sum(ADO[i,k,d] + x[i,k,20] for d in ad) <= 1)
+ADOs_AL = @constraint(roster, [i in Intern, k in Week, d in Day],
+            ADO[i,k,d] + x[i,k,20] <= 1)
 
-SEM_ADOs = @constraint(roster, [i in Intern, k in Week],
-            sum(SEM[i,k,s] + ADO[i,k,d]+ x[i,k,20] for s in WE, d in ad) <= 1)
+SEM_ADOs = @constraint(roster, [i in Intern, k in Week, s in WE, d in Day],
+            SEM[i,k,s] + ADO[i,k,d]+ x[i,k,20] <= 1)
 
-# NoThursADO = @constraint(roster, sum(ADO[i,k,4] for i in Intern, k in Week) == 0)
 
-SpacedOutADOS = @constraint(roster, [i in Intern, β in 0:11],
-                sum(ADO[i,5 + α + 4*β, d] for d in ad, α in 0:3) == 1)
+SpacedOutADOS_1 = @constraint(roster, [i in Intern, β in 0:7],
+                sum(ADO[i,5 + α + 4*β, d] for d in Day, α in 0:6) >= 1)
+SpacedOutADOS_2 = @constraint(roster, [i in Intern, β in 10:11],
+                sum(ADO[i,3 + α + 4*β, d] for d in Day, α in 0:4) >= 1)
+
+
+FriADO = @constraint(roster, [i in Intern], sum(ADO[i, k, 5] for k in Week) >= 5)
+WedADO = @constraint(roster, [i in Intern], sum(ADO[i, k, 3] for k in Week) >= 5)
+
+# for i in 0:7
+#     for j in 0:6
+#         println(5 + 4*i + j)
+#     end
+# end
+#
+# for i in 10:11
+#     for j in 0:4
+#         println(3 + 4*i + j)
+#     end
+# end
+
+# WedFriADO = @constraint(roster, sum(ADO[i,k,d] for i in Intern, k in Week, d in [4]) ==0)
+
 
 Late_Shift = @constraint(roster, [k in 5:52], sum(LATE[i, k] for i in Intern) == 1)
 
@@ -252,15 +281,20 @@ Even_Lates = @constraint(roster, [i in Intern], sum(LATE[i,k] for k in Week) ==4
 
 No_Early_Late = @constraint(roster, sum(LATE[i,k] for i in Intern, k in 1:4) == 0)
 
+@variable(roster, θ[Intern, Week], Bin)
+
 TIL_LATEs = @constraint(roster, [i in Intern, k in Week],
-            sum(TIL[i,k,d] for d in WE) + LATE[i,k] <= 1)
+            sum(TIL[i,k,d] for d in WE) + LATE[i,k] <= 1 + θ[i,k])
+
+@variable(roster, ω[Intern, Week], Bin)
 
 ADO_LATEs = @constraint(roster, [i in Intern, k in Week],
-            sum(ADO[i,k,d] for d in ad) + LATE[i,k] <= 1)
+            sum(ADO[i,k,d] for d in Day) + LATE[i,k] <= 1 + ω[i,k])
+
+lateCons = @expression(roster, sum(θ[i,k] + ω[i,k] for i in Intern, k in Week)) # + 100*η[i,k]
 
 # NLR = [3,5,6,7,8,9,10,12,13,15,16,17,18,19,20] # change for Sam
-NLR = [ 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20]
-
+NLR = [ 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21]
 
 
 @variable(roster, n[Intern, Week], Bin)
@@ -273,7 +307,7 @@ LATE_at_Clay_2 = @constraint(roster, [i in Intern, k in Week, j in NLR],
 Pub_Weeks = [4,11,15,16,17,24,39,44,52,52]
 Pub_Days =  [3, 1, 5, 1, 1, 1, 5, 2, 1, 2]
 
-PUB_ADOs = @constraint(roster, sum(ADO[i, k, d] for i in Intern, k in Pub_Weeks, d in ad) ==0)
+PUB_ADOs = @constraint(roster, sum(ADO[i, k, d] for i in Intern, k in Pub_Weeks, d in Day) ==0)
 
 Pub_Shifts_Clay_1 = @constraint(roster, [(k,d) in zip(Pub_Weeks,Pub_Days)],
                     sum(PubC_1[i,k,d] for i in Intern) == 1)
@@ -325,8 +359,9 @@ Seminars = @constraint(roster,
             sum(SEM[i,k,d] for i in Intern, (k,d) in zip(Sem_Weeks,Sem_Days)) == 96)
 
 C = @expression(roster,
-    sum( (PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] + SEM[i,k,s] + ADO[i,k,δ] + LATE[i,k] + TIL[i,k,s])
-    for i in Intern, k in Week, d in Day, s in WE, δ in ad ))
+    sum( (PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] + SEM[i,k,s] + ADO[i,k,d] + LATE[i,k] + TIL[i,k,s])
+    for i in Intern, k in Week, d in Day, s in WE ))
+
 
 # obj = @objective(roster, Min, z + C)
 #
@@ -343,7 +378,7 @@ MaxLateDisp = @expression(roster, sum(ϕ[i,k] for i in Intern, k in 5:52))
 # at least its only in the obj function
 
 # obj = @objective(roster, Min, z + C - LateDisp)
-obj = @objective(roster, Min, z + C - MaxLateDisp)
+obj = @objective(roster, Min, z + C + lateCons - MaxLateDisp)
 
 optimize!(roster)
 
@@ -423,10 +458,10 @@ end
 
 #_________________________________________________________________________
 ados_out = string.(convert.(Int64,
-    round.(sum((d*Matrix(JuMP.value.(ADO[:,:,d]))) for d in ad))))
+    round.(sum((d*Matrix(JuMP.value.(ADO[:,:,d]))) for d in 1:5))))
 
-weekdays = [ "Wed","Fri" ]
-for d in ad
+weekdays = [ "Mon", "Tues", "Wed", "Thur", "Fri" ]
+for d in 1:5
     replace!(ados_out, Nums[d] => weekdays[d])
 end
 XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
@@ -558,9 +593,15 @@ function indiv_roster(intern, filename, sheetname)
     str_ouput_weekedays = replace_rotations(v1)
     W = weekend_out(intern)
     combined_roster = [str_ouput_weekedays; W]
-    rost_with_pubs = publics(combined_roster, intern)
-    rost_with_ados = find_ados(rost_with_pubs, intern)
+    rost_with_ados = find_ados(combined_roster, intern)
     rost_with_til = find_til(rost_with_ados, intern)
+    for i in 1:length(Pub_Days)
+        combined_roster[Pub_Days[i], Pub_Weeks[i]] = 99
+    end
+    for i in 1:length(Sem_Days)
+        combined_roster[Sem_Days[i], Sem_Weeks[i]] = 101
+    end
+    rost_with_pubs = publics(rost_with_til, intern)
     final_rost = lateShifts(rost_with_til, intern)
     final_rost_str = replace_rest(final_rost)
 
