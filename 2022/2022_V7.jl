@@ -178,6 +178,13 @@ No_Three_Weekends_in_a_row = @constraint(roster, [i in Intern, k in 1:50],
                         sum(WeC_1[i,k,s] + WeC_2[i,k,s] + WeD[i,k,s] +
                         WeC_1[i,k+1,s] + WeC_2[i,k+1,s] + WeD[i,k+1,s] +
                         WeC_1[i,k+2,s] + WeC_2[i,k+2,s] + WeD[i,k+2,s] for s in WE) <= 2)
+No_Three_Pub_in_a_row = @constraint(roster, [i in Intern, k in 1:51],
+                       sum(PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] +
+                       PubC_1[i,k+1,d] + PubC_2[i,k+1,d] + PubD[i,k+1,d] for d in Day) <=1)
+WeekendAndPub = @constraint(roster, [i in Intern, k in 1:51],
+                        sum(PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] +
+                        PubC_1[i,k+1,d] + PubC_2[i,k+1,d] + PubD[i,k+1,d] for d in Day) +
+                        sum(WeC_1[i,k+1,s] + WeC_2[i,k+1,s] + WeD[i,k+1,s] for s in WE) <= 1)
 
 
 Single_Weekend_work_limiter = @constraint(roster, [i in Intern, k in Week],
@@ -256,6 +263,8 @@ SpacedOutADOS_1 = @constraint(roster, [i in Intern, β in 0:7],
 SpacedOutADOS_2 = @constraint(roster, [i in Intern, β in 10:11],
                 sum(ADO[i,3 + α + 4*β, d] for d in Day, α in 0:4) >= 1)
 
+
+ADOconstraint = @constraint(roster, sum(ADO[i,k,d] for i in Intern, k in Week, d in [1,2,4]) == 0)
 
 FriADO = @constraint(roster, [i in Intern], sum(ADO[i, k, 5] for k in Week) >= 5)
 WedADO = @constraint(roster, [i in Intern], sum(ADO[i, k, 3] for k in Week) >= 5)
