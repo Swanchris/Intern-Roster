@@ -12,6 +12,8 @@ Rotation = 1:21
 end
 )
 
+restricted = [4,7,11,15,16,17,22,24,29,39,44,52]
+
 # Leave _________________________________________________________________________
 
 Four_weeks = @constraint(roster, [i in Intern],
@@ -26,6 +28,10 @@ Third_week_dvar = @constraint(roster, [i in Intern],
 
 Third_week_block = @constraint(roster, [i in Intern, k in 47:51],
                     2*y[i, k, 20] - sum(x[i, k + alpha, 20] for alpha in 0:1) <= 0)
+
+# No_AL_dur_Sem = @constraint(roster, [i in Intern, k in [7,22,29,39]], x[i,k,20] == 0)
+
+No_AL_dur_Sem = @constraint(roster, [i in Intern, k in restricted], x[i,k,20] == 0)
 
 #cover all other scenarios:
 # leave_dvar = @constraint(roster, [i in Intern, k in Week],
@@ -139,9 +145,6 @@ Disp_early_all = @constraint(roster, [i in Intern],
 Disp_early_clay = @constraint(roster, [i in Intern], sum(x[i,k,14] for k in 1:4) <= 2)
 Disp_early_rest = @constraint(roster, [i in Intern, j in 15:18],
                     sum(x[i,k,j] for k in 1:4) <=1)
-
-# objective
-restricted = [4,7,11,15,16,17,22,24,29,39,44,52]
 
 #no qum / homr in certain weeks
 qum_constraint1 = @constraint(roster, sum(x[i,k,j] for i in Intern, j in 12:13, k in restricted) == 0)
@@ -286,7 +289,7 @@ No_TIL_2 = @constraint(roster, [i in Intern, k in Week, j in [12,13,20]],
 
 Late_Shift = @constraint(roster, [k in 5:52], sum(LATE[i, k] for i in Intern) == 1)
 
-Late_no_2_week = @constraint(roster, [i in Intern], sum(LATE[i,k] + LATE[i,k+1] for k in 1:51) <=1)
+Late_no_2_week = @constraint(roster, [i in Intern, k in 1:51], LATE[i,k] + LATE[i,k+1] <=1)
 
 Even_Lates = @constraint(roster, [i in Intern], sum(LATE[i,k] for k in Week) ==4)
 
@@ -358,6 +361,8 @@ NoPubDuringAL_2 = @constraint(roster,[i in Intern, (k,d) in zip(Pub_Weeks,Pub_Da
 # No_WE_after_leave = @constraint(roster, [i in Intern, k in 1:51, d in WE],
 #             WeC_1[i,k,d] + WeC_2[i,k,d] + WeD[i,k,d] + y[i,k,20] <= 1)
 
+AvoidPubSem = @expression(roster, sum((PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d])
+                            for i in Intern, k in [7,22,29,39], d in Day))
 
 
 MaxPubWork = @constraint(roster, [i in Intern],
@@ -368,6 +373,8 @@ Sem_Days =  [1,2, 1, 2, 1, 2, 1, 2]
 
 Seminars = @constraint(roster,
             sum(SEM[i,k,d] for i in Intern, (k,d) in zip(Sem_Weeks,Sem_Days)) == 96)
+
+
 
 # C = @expression(roster,
 #     sum( (PubC_1[i,k,d] + PubC_2[i,k,d] + PubD[i,k,d] + SEM[i,k,s] + ADO[i,k,d] + LATE[i,k] + TIL[i,k,s])
@@ -391,7 +398,7 @@ MaxLateDisp = @expression(roster, sum(ϕ[i,k] for i in Intern, k in 5:52))
 # at least its only in the obj function
 
 # obj = @objective(roster, Min, z + C - LateDisp)
-obj = @objective(roster, Min, z + C + lateCons - MaxLateDisp)
+obj = @objective(roster, Min, z + C + lateCons + AvoidPubSem - 40*MaxLateDisp)
 
 optimize!(roster)
 
@@ -400,6 +407,10 @@ optimize!(roster)
 
 wd = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 #_________________________________________________________________________
+
+rotations_matrix = sum(transpose(Matrix(JuMP.value.(x[i,:,:]))) for i in 1:12)
+
+
 
 out = sum((j*Matrix(JuMP.value.(x[:,:,j]))) for j in 1:21)
 Names = ["IP", "MCH", "AP", "MIC", "CPDan-G", "CPDan-V", "CPDan-MH",
@@ -630,3 +641,6 @@ end
 for i in 1:12
     indiv_roster(i, "output/2022_roster.xlsx", "Intern $(i) Roster")
 end
+
+
+#-------------------------------------------------------------
