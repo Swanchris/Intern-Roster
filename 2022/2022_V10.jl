@@ -410,7 +410,17 @@ wd = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunda
 
 rotations_matrix = sum(transpose(Matrix(JuMP.value.(x[i,:,:]))) for i in 1:12)
 
+# intern_names = ["Thao", "Anna", "Maddison", "Eric", "Eva", "Lu (Jessica)", "Kim V.", "Vy Kim", "Delan", "Monila", "Hans", "Emily"]
 
+old_roster_read = XLSX.readxlsx("output/2022_roster27.11.21.xlsx")
+yucky_mess = old_roster_read["Year"]
+header = yucky_mess["B1:BA3"]
+
+rows_for_weekdays = old_roster_read["Thao Roster"]["A1:A11"]
+
+intern_names = yucky_mess["A1:A15"]
+weekend_header = old_roster_read["Weekends"]["B1:DK3"]
+weekend_rows = old_roster_read["Weekends"]["A1:A6"]
 
 out = sum((j*Matrix(JuMP.value.(x[:,:,j]))) for j in 1:21)
 Names = ["IP", "MCH", "AP", "MIC", "CPDan-G", "CPDan-V", "CPDan-MH",
@@ -421,13 +431,20 @@ df = string.(convert.(Int64, round.(out)))
 for j in 1:21
     replace!(df, Nums[j] => Names[j])
 end
-list = convert(Array{Int64},transpose([i for i in 1:52]))
+# list = convert(Array{Int64},transpose([i for i in 1:52]))
+
+
+
+out1 = vcat(header, df)
+out2 = hcat(intern_names,out1)
+
 
 XLSX.openxlsx("output/2022_roster.xlsx", mode="w") do xf
     sheet = xf[1]
     XLSX.rename!(sheet, "Year")
-    sheet["B1:BA1"] = list
-    sheet["B4:BA15"] = df
+    sheet["A1:BA15"] = out2
+    # sheet["B1:BA1"] = list
+    # sheet["B4:BA15"] = df
 end
 
 #_________________________________________________________________________
@@ -471,14 +488,23 @@ Pub_container = reshape(Pub_container, 3, 10)
     reshape(Weekend_roster[259:306],3,16) ) reshape(Pub_container[25:30],3,2) (
     reshape(Weekend_roster[307:312],3,2) )]
 
-Weekend_roster = convert.(Int64, round.(Weekend))
+Weekend_roster = string.(convert.(Int64, round.(Weekend)))
+
+for j in 1:12
+    replace!(Weekend_roster, Nums[j] => intern_names[4:15][j])
+end
+
+w1 = hcat(weekend_rows, vcat(weekend_header,Weekend_roster))
+# Weekend_roster = convert.(Int64, round.(Weekend))
 
 
 XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
     XLSX.addsheet!(xf, "Weekends")
     sheet = xf[2]
-    sheet["B4:DK6"] = Weekend_roster
+    sheet["A1:DK6"] = w1
 end
+
+
 
 #_________________________________________________________________________
 # ados_out = string.(convert.(Int64,
@@ -501,11 +527,20 @@ til_out = string.(convert.(Int64,
 for d in 1:2
     replace!(til_out, Nums[d] => weekdays[d])
 end
+replace!(til_out, "0" => " ")
+
+t1 = hcat(intern_names, vcat(header, til_out))
+
+function rostFormat(ROS)
+    return hcat(intern_names, vcat(header, ROS))
+end
+
 XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
-    XLSX.addsheet!(xf, "TIL")
+    XLSX.addsheet!(xf, "TOIL")
     sheet = xf[3]
-    sheet["B1:BA1"] = list
-    sheet["B4:BA15"] = til_out
+    sheet["A1:BA15"] = t1
+    # sheet["B1:BA1"] = list
+    # sheet["B4:BA15"] = til_out
 end
 #_________________________________________________________________________
 late = (out).*Matrix(JuMP.value.(LATE[:,:]))
@@ -513,11 +548,13 @@ late = string.(convert.(Int64, round.(late)))
 for j in 1:21
     replace!(late, Nums[j] => Names[j])
 end
+replace!(late, "0" => " ")
 XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
     XLSX.addsheet!(xf, "Late_Shift")
     sheet = xf[4]
-    sheet["B1:BA1"] = list
-    sheet["B4:BA15"] = late
+    sheet["A1:BA15"] = rostFormat(late)
+    # sheet["B1:BA1"] = list
+    # sheet["B4:BA15"] = late
 end
 #_________________________________________________________________________
 
@@ -612,6 +649,7 @@ function replace_rest(x)
 end
 
 
+
 function indiv_roster(intern, filename, sheetname)
     rrr = jump_to_int(intern)
     v1 = convert_rots_to_vector(rrr)
@@ -629,17 +667,26 @@ function indiv_roster(intern, filename, sheetname)
     rost_with_pubs = publics(rost_with_til, intern)
     final_rost = lateShifts(rost_with_til, intern)
     final_rost_str = replace_rest(final_rost)
+    shorthand = ["99","101"]
+    propername = ["Public Hol.", "Seminar Day"]
+    for i in 1:2
+        replace!(final_rost_str, shorthand[i] => propername[i] )
+    end
+    replace!(final_rost_str, "0" => " ")
 
     XLSX.openxlsx(filename, mode="rw") do xf
         XLSX.addsheet!(xf, sheetname)
         sheet = xf[intern + 4]
-        sheet["B1:BA1"] = list
-        sheet["B4:BA11"] = final_rost_str
+        sheet["A1:BA11"] = hcat(rows_for_weekdays, vcat(header, final_rost_str))
+        # sheet["B1:BA1"] = list
+        # sheet["B4:BA11"] = final_rost_str
     end
 end
 
+
+
 for i in 1:12
-    indiv_roster(i, "output/2022_roster.xlsx", "Intern $(i) Roster")
+    indiv_roster(i, "output/2022_roster.xlsx", "$(intern_names[i+3]) Roster")
 end
 
 
