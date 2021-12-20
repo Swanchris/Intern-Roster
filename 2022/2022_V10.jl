@@ -44,7 +44,7 @@ physical = @constraint(roster, [i in Intern, k in Week], sum(x[i,k,j] for j in R
 # Rotations  _________________________________________________________________________
 
 rotations = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
-capacity  = [2,1,1,1,1,1,1,1,1, 1, 6, 1, 1, 2, 1, 1, 1, 1, 1,12, 1] # after week 5
+capacity  = [2,1,1,1,1,1,1,1,1, 1, 6, 1, 2, 2, 1, 1, 1, 1, 1,12, 1] # after week 5
 ## CHANGED QUM TO ONLY 1 INTERN AT A TIME
 early_cap = [2,0,0,0,0,0,0,0,0, 0, 0, 0, 0, 4, 2, 1, 1, 2, 0, 0, 0] # weeks 1 to 4
 
@@ -135,7 +135,13 @@ HOMR_2 = @constraint(roster, [i in Intern], sum(x[i,k,12] for k in 5:30) ==1)
 
 # j =13
 qum_1 = @constraint(roster, [i in Intern], sum(x[i,k,13] for k in 5:21) >= 1)
-qum_2 = @constraint(roster, [i in Intern], sum(x[i,k,13] for k in 1:39) == 2)
+qum_2 = @constraint(roster, [i in Intern], sum(x[i,k,13] for k in 1:34) == 2)
+
+@variable(roster, Γ[Week], Bin)
+
+QUM_con = @constraint(roster, [k in Week], sum(x[i,k,13] for i in Intern) <= 1 + Γ[k])
+
+Q = @expression(roster, 100*sum(Γ[k] for k in Week))
 
 # j = {14,18}
 Disp = @constraint(roster, [i in Intern],
@@ -398,7 +404,7 @@ MaxLateDisp = @expression(roster, sum(ϕ[i,k] for i in Intern, k in 5:52))
 # at least its only in the obj function
 
 # obj = @objective(roster, Min, z + C - LateDisp)
-obj = @objective(roster, Min, z + C + lateCons + AvoidPubSem - 40*MaxLateDisp)
+obj = @objective(roster, Min, z + C + Q + lateCons + AvoidPubSem - 40*MaxLateDisp)
 
 optimize!(roster)
 
@@ -408,7 +414,6 @@ optimize!(roster)
 wd = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 #_________________________________________________________________________
 
-rotations_matrix = sum(transpose(Matrix(JuMP.value.(x[i,:,:]))) for i in 1:12)
 
 # intern_names = ["Thao", "Anna", "Maddison", "Eric", "Eva", "Lu (Jessica)", "Kim V.", "Vy Kim", "Delan", "Monila", "Hans", "Emily"]
 
@@ -650,7 +655,7 @@ end
 
 
 
-function indiv_roster(intern, filename, sheetname)
+function indiv_roster(intern, filename, sheetname, container)
     rrr = jump_to_int(intern)
     v1 = convert_rots_to_vector(rrr)
     v1 = make_5_day_week(v1)
@@ -674,20 +679,89 @@ function indiv_roster(intern, filename, sheetname)
     end
     replace!(final_rost_str, "0" => " ")
 
+    fin = hcat(rows_for_weekdays, vcat(header, final_rost_str))
+
+    append!(container,[fin])
+
     XLSX.openxlsx(filename, mode="rw") do xf
         XLSX.addsheet!(xf, sheetname)
         sheet = xf[intern + 4]
-        sheet["A1:BA11"] = hcat(rows_for_weekdays, vcat(header, final_rost_str))
+        sheet["A1:BA11"] = fin
         # sheet["B1:BA1"] = list
         # sheet["B4:BA11"] = final_rost_str
     end
 end
 
+INTERNS = []
 
 
 for i in 1:12
-    indiv_roster(i, "output/2022_roster.xlsx", "$(intern_names[i+3]) Roster")
+    indiv_roster(i, "output/2022_roster.xlsx", "$(intern_names[i+3]) Roster", INTERNS)
 end
 
 
 #-------------------------------------------------------------
+
+# N0002
+
+using Dates
+yeardates = Dates.Date(2022,1,3):Dates.Day(1):Dates.Date(2023,1,1)
+weekdaysInYear = filter(dy -> Dates.dayname(dy) != "Saturday" && Dates.dayname(dy) != "Sunday" , yeardates)
+yearWeekdays = repeat(weekdays, 52)
+starter = vcat(permutedims(yearWeekdays),permutedims(weekdaysInYear))
+
+intr = ["Pharmacy N0002 Roster", "Date: 2022"]
+
+heading = hcat(intr, starter)
+
+INTERNS
+
+INTERNS[12][5:9,53]
+
+52*5
+
+new_contain = string.(zeros(12,261))
+
+new_contain[:,1] = intern_names[4:15] # add the intern names
+for i in 1:12
+    for j in 0:51
+        new_contain[i,5*j+2:5*j+6] = INTERNS[i][5:9,j+2]
+    end
+end
+
+new_contain
+
+
+sum(JuMP.value.(LATE))
+JuMP.value.(LATE[1,:])
+
+sum((i*Matrix(JuMP.value.(LATE[:,]))) for i in 1:12)
+
+lates_cont = zeros(261)
+
+for i in 0:51
+    lates_cont[5*i+2:5*i+6] = repeat([sum(j*(JuMP.value.(LATE[j,i+1])) for j in 1:12)],5)
+end
+
+lates_cont
+
+elem = string.(convert.(Int64, round.(lates_cont)))
+intNums = string.(collect(1:12))
+for i in 1:12
+    replace!(elem, intNums[i] => intern_names[4:15][i])
+end
+
+intern_names
+
+elem[1] = "Late Shift MMC"
+elem[2:21] = repeat([""],20)
+elem
+
+
+n0002 = vcat(vcat(heading,new_contain), permutedims(elem))
+
+XLSX.openxlsx("output/2022_roster.xlsx", mode="rw") do xf
+    XLSX.addsheet!(xf, "N0002")
+    sheet = xf[17]
+    sheet["A1:JA15"] = n0002
+end
